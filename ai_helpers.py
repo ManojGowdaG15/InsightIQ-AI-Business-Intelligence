@@ -35,12 +35,32 @@ def _get_config(key: str, default: str = "") -> str:
 
 
 def _call_llm(prompt: str, history: list | None = None) -> str:
-    """Try querying Groq first; if Groq fails or returns 403, fallback to Google Gemini (or simulated response)."""
-    
-    # 1. Try Groq API if GROQ_API_KEY is configured
+    """Try querying Gemini or Groq based on configured secrets."""
     groq_key = _get_config("GROQ_API_KEY")
     gemini_key = _get_config("GEMINI_API_KEY") or _get_config("GOOGLE_API_KEY")
 
+    # 1. Try Google Gemini API first if GEMINI_API_KEY is configured
+    if gemini_key:
+        try:
+            from google import genai
+            client = genai.Client(api_key=gemini_key)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e1:
+            try:
+                import importlib
+                legacy_genai = importlib.import_module("google.generativeai")
+                legacy_genai.configure(api_key=gemini_key)
+                m = legacy_genai.GenerativeModel("gemini-1.5-flash")
+                res = m.generate_content(prompt)
+                return res.text
+            except Exception as e2:
+                print(f"Gemini API error: {e1} / {e2}")
+
+    # 2. Try Groq API if GROQ_API_KEY is configured
     if groq_key:
         try:
             from groq import Groq
@@ -61,23 +81,7 @@ def _call_llm(prompt: str, history: list | None = None) -> str:
             )
             return resp.choices[0].message.content
         except Exception as e:
-            err_msg = str(e)
-            print(f"Groq API error: {err_msg}")
-            # If forbidden/403 or invalid model, try secondary model
-            if "403" in err_msg or "access denied" in err_msg.lower():
-                pass
-
-    # 2. Try Google Gemini API if GEMINI_API_KEY is configured
-    if gemini_key:
-        try:
-            import importlib
-            genai = importlib.import_module("google.generativeai")
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Gemini API error: {e}")
+            print(f"Groq API error: {e}")
 
     # 3. Rule-based / Context Fallback (if no API keys work)
     return (
