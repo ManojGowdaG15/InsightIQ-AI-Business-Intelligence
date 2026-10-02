@@ -19,7 +19,7 @@ from groq import Groq
 
 import db
 
-DEFAULT_MODEL = "openai/gpt-oss-120b"
+DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
 
 def _get_config(key: str, default: str = "") -> str:
