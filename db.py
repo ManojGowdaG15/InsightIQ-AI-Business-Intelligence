@@ -8,6 +8,7 @@ still demonstrating real SQL skills - all aggregation here is done with
 SQL, not pandas, on purpose.
 """
 
+import os
 import sqlite3
 import pandas as pd
 
@@ -15,7 +16,28 @@ DB_PATH = "data/sales.db"
 TABLE_NAME = "sales"
 
 
+def ensure_db_exists():
+    """Ensure data/sales.db exists on disk. If not, generate data, clean it, and load SQLite."""
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        print(f"Database {DB_PATH} not found. Running data pipeline initialization...")
+        os.makedirs("data", exist_ok=True)
+        
+        # 1. Generate raw data if missing
+        if not os.path.exists("data/raw_sales.csv"):
+            import generate_data
+            generate_data.main() if hasattr(generate_data, "main") else None
+            
+        # 2. Clean data if missing
+        if not os.path.exists("data/clean_sales.csv"):
+            import clean_data
+            clean_data.main() if hasattr(clean_data, "main") else None
+            
+        # 3. Load to SQLite
+        load_to_sqlite()
+
+
 def load_to_sqlite(csv_path: str = "data/clean_sales.csv", db_path: str = DB_PATH):
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
     df = pd.read_csv(csv_path, parse_dates=["order_date"])
     conn = sqlite3.connect(db_path)
     df.to_sql(TABLE_NAME, conn, if_exists="replace", index=False)
@@ -24,6 +46,7 @@ def load_to_sqlite(csv_path: str = "data/clean_sales.csv", db_path: str = DB_PAT
 
 
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
+    ensure_db_exists()
     return sqlite3.connect(db_path)
 
 
