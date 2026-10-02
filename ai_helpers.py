@@ -19,7 +19,7 @@ import streamlit as st
 import db
 
 # Default model candidates for Groq
-GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+GROQ_MODELS = ["llama-3.1-8b-instant", "llama3-70b-8192", "mixtral-8x7b-32768"]
 
 
 def _get_config(key: str, default: str = "") -> str:
@@ -35,36 +35,13 @@ def _get_config(key: str, default: str = "") -> str:
 
 
 def _call_llm(prompt: str, history: list | None = None) -> str:
-    """Try querying Gemini or Groq based on configured secrets."""
+    """Try querying Groq or Gemini based on configured secrets."""
     groq_key = _get_config("GROQ_API_KEY")
     gemini_key = _get_config("GEMINI_API_KEY") or _get_config("GOOGLE_API_KEY")
 
     errors = []
 
-    # 1. Try Google Gemini API first if GEMINI_API_KEY is configured
-    if gemini_key:
-        try:
-            from google import genai
-            client = genai.Client(api_key=gemini_key)
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e1:
-            try:
-                import importlib
-                legacy_genai = importlib.import_module("google.generativeai")
-                legacy_genai.configure(api_key=gemini_key)
-                m = legacy_genai.GenerativeModel("gemini-1.5-flash")
-                res = m.generate_content(prompt)
-                return res.text
-            except Exception as e2:
-                errors.append(f"Gemini: {e1} | {e2}")
-    else:
-        errors.append("GEMINI_API_KEY not found in environment or secrets.")
-
-    # 2. Try Groq API if GROQ_API_KEY is configured
+    # 1. Try Groq API if GROQ_API_KEY is configured
     if groq_key:
         try:
             from groq import Groq
@@ -86,8 +63,17 @@ def _call_llm(prompt: str, history: list | None = None) -> str:
             return resp.choices[0].message.content
         except Exception as e:
             errors.append(f"Groq: {e}")
-    else:
-        errors.append("GROQ_API_KEY not found in environment or secrets.")
+
+    # 2. Try Google Gemini API if GEMINI_API_KEY is configured
+    if gemini_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            errors.append(f"Gemini: {e}")
 
     err_details = "<br>".join(errors)
     # 3. Rule-based / Context Fallback (if no API keys work)
