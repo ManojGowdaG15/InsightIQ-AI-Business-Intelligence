@@ -39,6 +39,8 @@ def _call_llm(prompt: str, history: list | None = None) -> str:
     groq_key = _get_config("GROQ_API_KEY")
     gemini_key = _get_config("GEMINI_API_KEY") or _get_config("GOOGLE_API_KEY")
 
+    errors = []
+
     # 1. Try Google Gemini API first if GEMINI_API_KEY is configured
     if gemini_key:
         try:
@@ -58,7 +60,9 @@ def _call_llm(prompt: str, history: list | None = None) -> str:
                 res = m.generate_content(prompt)
                 return res.text
             except Exception as e2:
-                print(f"Gemini API error: {e1} / {e2}")
+                errors.append(f"Gemini: {e1} | {e2}")
+    else:
+        errors.append("GEMINI_API_KEY not found in environment or secrets.")
 
     # 2. Try Groq API if GROQ_API_KEY is configured
     if groq_key:
@@ -81,16 +85,19 @@ def _call_llm(prompt: str, history: list | None = None) -> str:
             )
             return resp.choices[0].message.content
         except Exception as e:
-            print(f"Groq API error: {e}")
+            errors.append(f"Groq: {e}")
+    else:
+        errors.append("GROQ_API_KEY not found in environment or secrets.")
 
+    err_details = "<br>".join(errors)
     # 3. Rule-based / Context Fallback (if no API keys work)
     return (
-        "⚠️ **AI Service Note**: Could not connect to LLM API (Access Denied / Rate Limit).\n\n"
-        "Please verify your `GROQ_API_KEY` or `GEMINI_API_KEY` in Streamlit App Settings -> Secrets.\n\n"
-        "**Summary from SQL Aggregates:**\n"
-        "- Total Revenue: $2.29M\n"
-        "- Net Profit: $762.1K (33.25% Margin)\n"
-        "- Top Product: Aero Laptop 16 ($828.7K)\n"
+        f"⚠️ **AI Service Note**: Could not query LLM API.<br><br>"
+        f"**Diagnostic Details:**<br>{err_details}<br><br>"
+        "**Summary from SQL Aggregates:**<br>"
+        "- Total Revenue: $2.29M<br>"
+        "- Net Profit: $762.1K (33.25% Margin)<br>"
+        "- Top Product: Aero Laptop 16 ($828.7K)<br>"
         "- Top Region: South ($507.6K)"
     )
 
